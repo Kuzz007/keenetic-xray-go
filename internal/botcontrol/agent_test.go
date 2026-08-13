@@ -92,7 +92,8 @@ func (h *fakeHandler) Handle(_ context.Context, cmd Command) (string, error) {
 func TestRun_PollsExecutesAndPostsResult(t *testing.T) {
 	var mu sync.Mutex
 	served := false
-	var gotResult ResultRequest
+	var gotResult Result
+	var gotRouterID string
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/poll", func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +103,9 @@ func TestRun_PollsExecutesAndPostsResult(t *testing.T) {
 		}
 		mu.Lock()
 		defer mu.Unlock()
+		if got := r.Header.Get(RouterIDHeader); got != "router-1" {
+			t.Errorf("poll: %s header = %q, want %q", RouterIDHeader, got, "router-1")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if served {
 			_ = json.NewEncoder(w).Encode(PollResponse{})
@@ -117,6 +121,7 @@ func TestRun_PollsExecutesAndPostsResult(t *testing.T) {
 		}
 		mu.Lock()
 		defer mu.Unlock()
+		gotRouterID = r.Header.Get(RouterIDHeader)
 		_ = json.NewDecoder(r.Body).Decode(&gotResult)
 		w.WriteHeader(http.StatusOK)
 	})
@@ -142,8 +147,11 @@ func TestRun_PollsExecutesAndPostsResult(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if gotResult.Result.CommandID != "1" || gotResult.Result.Output != "did status" {
+	if gotResult.CommandID != "1" || gotResult.Output != "did status" {
 		t.Errorf("gotResult = %+v, want CommandID=\"1\" Output=\"did status\"", gotResult)
+	}
+	if gotRouterID != "router-1" {
+		t.Errorf("result: %s header = %q, want %q", RouterIDHeader, gotRouterID, "router-1")
 	}
 }
 

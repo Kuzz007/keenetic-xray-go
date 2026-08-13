@@ -41,11 +41,6 @@ type Result struct {
 	Completed time.Time `json:"completed"`
 }
 
-// PollRequest is what the agent sends to ask for queued work.
-type PollRequest struct {
-	RouterID string `json:"router_id"`
-}
-
 // PollResponse carries at most one queued command -- the agent executes
 // it, posts the Result, and polls again for the next one rather than
 // being handed a batch.
@@ -53,8 +48,8 @@ type PollResponse struct {
 	Command *Command `json:"command,omitempty"`
 }
 
-// ResultRequest is what the agent posts after executing a command.
-type ResultRequest struct {
-	RouterID string `json:"router_id"`
-	Result   Result `json:"result"`
-}
+// RouterIDHeader identifies which router a /agent/poll or /agent/result
+// request is for. A header, not a JSON body field: the server's auth
+// middleware needs it before (and regardless of) parsing any body, and
+// /agent/poll has no body at all.
+const RouterIDHeader = "X-Router-Id"

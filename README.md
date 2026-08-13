@@ -3,10 +3,10 @@
 A single Xray (VLESS) failover installer and manager for Keenetic routers
 running Entware, targeting **mipsel** and **aarch64** only.
 
-Status: v0.1.0 checkpoint reached — install, configure, and run automatic
-failover works end to end. Remote (Telegram bot) control is not built yet.
-See `docs/architecture.md` for how it fits together and
-`docs/full-vs-mini.md` for the Mini/Full variant split.
+Status: install, configure, run automatic failover, and remote control via
+a Telegram bot all work end to end. See `docs/architecture.md` for how it
+fits together, `docs/full-vs-mini.md` for the Mini/Full variant split, and
+`docs/bot-control-design.md` for the remote-control design.
 
 ## What this is
 
@@ -16,12 +16,16 @@ See `docs/architecture.md` for how it fits together and
   checked with a real HTTP request through the live proxy (not bare
   ICMP), with an isolated pre-test before failing back to primary.
 - Accepts either a raw `vless://` link or a subscription URL, both from
-  the CLI (`keenetic-xray setup`) and (once built) the remote bot.
+  the CLI (`keenetic-xray setup`) and the remote bot.
 - Installs the Xray core from Entware's own `opkg` feed as a package
   dependency (`Depends: xray-core` in the `.ipk` control file); ships no
   geoip/geosite routing data — whole-LAN redirection through the local
   proxy port is handled by Keenetic's own Policy-Based Routing, not by
   this project.
+- Optional remote control via a Telegram bot (Full variant only): a
+  separate `keenetic-xray-control-server` binary runs on a VPS, and each
+  router polls it for queued commands (`/status`, `/switch`,
+  subscription management) — see `docs/bot-control-design.md`.
 
 ## Installing
 
@@ -56,10 +60,26 @@ keenetic-xray subscription {set-url <url>|refresh|list|set-primary <i>|set-backu
 keenetic-xray status
 keenetic-xray doctor
 keenetic-xray variant {show|set mini|set full}
+keenetic-xray agent {configure <url> <router-id> <fingerprint> <token>|enable|disable|status}
 ```
 
 `status`/`doctor` currently report saved configuration only (`config.json`),
-not live daemon state -- there's no CLI↔daemon IPC layer yet.
+not live daemon state -- there's no CLI↔daemon IPC layer yet. `agent enable`
+requires the Full variant; see `docs/bot-control-design.md`.
+
+## Remote control (Telegram bot)
+
+`keenetic-xray-control-server` is a separate binary that runs on a VPS,
+independent of the router installer. It queues commands from a Telegram
+bot and serves them to polling router agents over self-signed,
+fingerprint-pinned TLS. See `docs/bot-control-design.md` for the full
+design, including the config file format and how to fetch a fresh
+server's fingerprint for `keenetic-xray agent configure`.
+
+```sh
+KEENETIC_XRAY_CS_CONFIG=/etc/keenetic-xray-control-server/config.json \
+  keenetic-xray-control-server
+```
 
 ## Relationship to `keenetic_xray_installer`
 
@@ -72,6 +92,7 @@ design) but nothing here is copied from it.
 
 ```sh
 go build -o keenetic-xray ./cmd/keenetic-xray
+go build -o keenetic-xray-control-server ./cmd/keenetic-xray-control-server
 ```
 
 Cross-compiling for the router architectures:
@@ -80,6 +101,10 @@ Cross-compiling for the router architectures:
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64  go build -trimpath -ldflags "-s -w" -o dist/keenetic-xray-linux-arm64  ./cmd/keenetic-xray
 CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat go build -trimpath -ldflags "-s -w" -o dist/keenetic-xray-linux-mipsle ./cmd/keenetic-xray
 ```
+
+`keenetic-xray-control-server` targets ordinary VPS architectures
+(`linux/amd64`, `linux/arm64`), not the router pair above -- it never runs
+on a router.
 
 Building a `.ipk` locally (see `docs/architecture.md` for why this script
 exists instead of relying solely on goreleaser's `nfpm` integration):

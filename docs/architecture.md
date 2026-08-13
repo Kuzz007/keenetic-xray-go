@@ -2,20 +2,24 @@
 
 ## One binary, dispatched by subcommand
 
-`cmd/keenetic-xray` is the only binary this project ships. There is no
-separate CLI/daemon/agent binary split: a stdlib-only Go binary is
-roughly the same size (~5-6MB stripped, measured directly) regardless of
-which features are compiled in, since Go statically links its runtime
-either way -- splitting into multiple binaries would buy little and
-would reintroduce, at the binary level, the "many near-duplicate
-artifacts" problem this project deliberately avoids at the installer
-level (see below).
+`cmd/keenetic-xray` is the only binary this project ships *for the
+router*. There is no separate CLI/daemon/agent binary split on that side:
+a stdlib-only Go binary is roughly the same size (~5-6MB stripped,
+measured directly) regardless of which features are compiled in, since Go
+statically links its runtime either way -- splitting into multiple
+binaries would buy little and would reintroduce, at the binary level, the
+"many near-duplicate artifacts" problem this project deliberately avoids
+at the installer level (see below). `cmd/keenetic-xray-control-server` is
+a genuinely separate binary, but deliberately so -- see
+`docs/bot-control-design.md` for why the VPS side isn't part of this
+split.
 
 Current subcommands: `version`, `setup`, `daemon`, `profile`,
-`subscription`, `status`, `doctor`, `variant`, and the hidden `internal
+`subscription`, `status`, `doctor`, `variant`, `agent` (configure/enable/
+disable/status for the control-server polling loop -- Full variant only,
+see `docs/bot-control-design.md`), and the hidden `internal
 postinst-setup` / `internal prerm-cleanup` used only by the `.ipk`'s
-packaging scripts. `agent` (the control-server polling loop) is not
-built yet.
+packaging scripts.
 
 ## Package layout
 
@@ -27,6 +31,7 @@ built yet.
 | `internal/failover` | The failover state machine (`state.go`, pure logic, no I/O, driven via an `Actions` interface so it's unit-testable with fakes) and its wiring to real `xrayctl`/`config` (`daemon.go`) |
 | `internal/diskspace` | Resolves the real filesystem behind a path (Entware routinely symlinks `/opt` to a USB mount, not the internal flash overlay) and reports free space via `statfs` |
 | `internal/install` | The `.ipk` postinst/prerm logic: directory setup, the Mini/Full decision, and the "never overwrite an existing config.json" upgrade guarantee |
+| `internal/botcontrol` | The router agent (`agent.go`, TLS-fingerprint-pinned polling client) and its command handlers (`commands.go`, thin wrappers over `internal/config`/`internal/subscription`/`internal/failover`); the control-server pieces the router never uses -- HTTP API (`server.go`), self-signed cert generation (`tls.go`), the persisted command queue (`queue.go`), and the Telegram bot (`telegram.go`) -- see `docs/bot-control-design.md` |
 
 ## Why one unified `.ipk` instead of a `curl \| sh` script
 
@@ -78,12 +83,10 @@ flapping primary every 30 seconds.
   Policy-Based Routing feature, configured separately in the router's
   web UI -- this project never touches `iptables`/TPROXY.
 - **No CLI↔daemon IPC yet.** `status`/`doctor` read `config.json`
-  directly; they report saved configuration, not live daemon state. A
-  future version could add a Unix-socket protocol for this, but it
-  wasn't needed to make the CLI/wizard genuinely useful, so it wasn't
-  built speculatively.
-- **No remote bot control yet.** Planned as a VPS control-server +
-  polling router agent (the same shape the reference `keenetic_xray_installer`
-  project uses, reimplemented fresh) -- deliberately sequenced last since
-  it's the single largest remaining scope item and everything else here
-  is independently useful without it.
+  directly; they report saved configuration, not live daemon state. The
+  bot-control agent doesn't need this either -- it runs *inside* `daemon`
+  as a goroutine (see `docs/bot-control-design.md`), sharing the same
+  in-memory `*failover.Daemon` rather than talking to it over IPC. A
+  future version could still add a Unix-socket protocol for the CLI's
+  benefit, but it wasn't needed to make the CLI/wizard genuinely useful,
+  so it wasn't built speculatively.

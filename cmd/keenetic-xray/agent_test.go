@@ -75,6 +75,32 @@ func TestCmdAgent_EnableWithoutConfigureErrors(t *testing.T) {
 	}
 }
 
+func TestCmdAgent_EnableRejectedOnMiniVariant(t *testing.T) {
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "config.json")
+	t.Setenv("KEENETIC_XRAY_CONFIG", configFile)
+	t.Setenv("KEENETIC_XRAY_AGENT_TOKEN_FILE", filepath.Join(dir, "token.secret"))
+
+	if err := run([]string{"agent", "configure", "https://vps.example.com:8443", "router-1", "deadbeef", "s3cr3t"}); err != nil {
+		t.Fatalf("agent configure: %v", err)
+	}
+	if err := run([]string{"variant", "set", "mini"}); err != nil {
+		t.Fatalf("variant set mini: %v", err)
+	}
+
+	if err := run([]string{"agent", "enable"}); err == nil {
+		t.Error("expected error enabling the agent on the Mini variant")
+	}
+
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Agent.Enabled {
+		t.Error("Agent.Enabled should remain false after a rejected enable")
+	}
+}
+
 func TestLoadAgentOptions_MissingTokenFile(t *testing.T) {
 	cfg := config.Default()
 	cfg.Agent.ControlServerURL = "https://x"
