@@ -67,26 +67,10 @@ func subscriptionRefresh() error {
 	if err != nil {
 		return fmt.Errorf("refreshing subscription: %w", err)
 	}
-	for _, w := range result.Warnings {
+
+	warnings := subscription.ApplyResult(cfg, result)
+	for _, w := range warnings {
 		fmt.Println("warning:", w)
-	}
-
-	cfg.Profiles = result.Profiles
-	cfg.Subscription.LastFetchedAt = time.Now()
-
-	if result.PrimaryStatus == subscription.MatchUnique {
-		cfg.PrimaryIndex = result.PrimaryIndex
-		cfg.Subscription.PrimaryKey = result.Profiles[result.PrimaryIndex].Remark
-	} else {
-		cfg.PrimaryIndex = -1
-		fmt.Printf("warning: could not re-match primary (%s) -- pick one with `subscription set-primary`\n", matchStatusReason(result.PrimaryStatus))
-	}
-	if result.BackupStatus == subscription.MatchUnique {
-		cfg.BackupIndex = result.BackupIndex
-		cfg.Subscription.BackupKey = result.Profiles[result.BackupIndex].Remark
-	} else {
-		cfg.BackupIndex = -1
-		fmt.Printf("warning: could not re-match backup (%s) -- pick one with `subscription set-backup`\n", matchStatusReason(result.BackupStatus))
 	}
 
 	if err := cfg.Save(configPath()); err != nil {
@@ -94,17 +78,6 @@ func subscriptionRefresh() error {
 	}
 	fmt.Printf("refreshed: %d profiles\n", len(cfg.Profiles))
 	return nil
-}
-
-func matchStatusReason(s subscription.MatchResult) string {
-	switch s {
-	case subscription.MatchNotFound:
-		return "not found in the refreshed list"
-	case subscription.MatchAmbiguous:
-		return "ambiguous -- multiple profiles share that name"
-	default:
-		return "no prior selection"
-	}
 }
 
 func subscriptionList() error {

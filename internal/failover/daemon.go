@@ -15,6 +15,7 @@ type Paths struct {
 	XrayBinary       string
 	ProductionConfig string
 	PretestConfig    string
+	Env              []string // extra env vars for the supervised xray-core processes; nil inherits the parent's environment (test hook, see xrayctl.Supervisor.Env)
 }
 
 // realActions implements Actions against real xray-core processes (via
@@ -39,6 +40,7 @@ func newRealActions(paths Paths, cfg *config.Config) *realActions {
 			BinaryPath: paths.XrayBinary,
 			ConfigPath: paths.ProductionConfig,
 			Name:       "production",
+			Env:        paths.Env,
 		},
 	}
 }
@@ -115,6 +117,7 @@ func (a *realActions) StartIsolatedPretest(ctx context.Context) error {
 		BinaryPath: a.paths.XrayBinary,
 		ConfigPath: a.paths.PretestConfig,
 		Name:       "pretest",
+		Env:        a.paths.Env,
 	}
 	return a.pretest.Start()
 }
@@ -129,19 +132,32 @@ func (a *realActions) StopIsolatedPretest(ctx context.Context) error {
 
 // Daemon drives a Machine on a real ticker, using real xray-core processes
 // and config files. Subscription refresh is deliberately not wired in
-// here -- it's CLI/bot-triggered (M5/M9), not something the core failover
-// loop needs to own.
+// here -- it's CLI/bot-triggered, not something the core failover loop
+// needs to own.
+//
+// Machine itself is not safe for concurrent use -- it's designed to be
+// driven by a single goroutine (Run's own loop). External callers (the
+// bot-control agent, running in its own goroutine) never touch it
+// directly: ForceSwitch/State submit a closure on the commands channel
+// and Run's select loop executes it in between ticks, so a command can
+// never race with an in-flight Tick.
 type Daemon struct {
-	machine *Machine
-	actions *realActions
-	cfg     *config.Config
+	machine  *Machine
+	actions  *realActions
+	cfg      *config.Config
+	commands chan daemonCommand
+}
+
+type daemonCommand struct {
+	fn   func(context.Context)
+	done chan struct{}
 }
 
 // NewDaemon builds a Daemon wired to real components.
 func NewDaemon(paths Paths, cfg *config.Config) *Daemon {
 	actions := newRealActions(paths, cfg)
 	machine := NewMachine(failoverConfig(cfg.Failover), actions, nil, StateActivePrimary)
-	return &Daemon{machine: machine, actions: actions, cfg: cfg}
+	return &Daemon{machine: machine, actions: actions, cfg: cfg, commands: make(chan daemonCommand)}
 }
 
 func failoverConfig(c config.FailoverConfig) Config {
@@ -153,13 +169,61 @@ func failoverConfig(c config.FailoverConfig) Config {
 	}
 }
 
-// State returns the daemon's current failover state.
-func (d *Daemon) State() State { return d.machine.State() }
+// do runs fn on Run's own goroutine and waits for it to finish, returning
+// false if ctx is done before Run picked it up (including if Run was
+// never started, or has already returned). Safe to call from any
+// goroutine.
+func (d *Daemon) do(ctx context.Context, fn func(context.Context)) bool {
+	done := make(chan struct{})
+	select {
+	case d.commands <- daemonCommand{fn: fn, done: done}:
+	case <-ctx.Done():
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// State returns the daemon's current failover state. Safe to call
+// concurrently with Run; the second return value is false if Run isn't
+// currently active to answer.
+func (d *Daemon) State(ctx context.Context) (State, bool) {
+	var s State
+	ran := d.do(ctx, func(context.Context) { s = d.machine.State() })
+	return s, ran
+}
+
+// ForceSwitch immediately points production at role, bypassing the normal
+// failure-counting logic -- for an explicit operator command (CLI/bot),
+// not the automatic health-check loop. Safe to call concurrently with Run.
+func (d *Daemon) ForceSwitch(ctx context.Context, role Role) error {
+	var switchErr error
+	ran := d.do(ctx, func(ctx context.Context) {
+		if switchErr = d.actions.SwitchLiveTo(ctx, role); switchErr != nil {
+			return
+		}
+		if role == RolePrimary {
+			_ = d.actions.StopIsolatedPretest(ctx)
+			d.machine.forceState(StateActivePrimary)
+		} else {
+			d.machine.forceState(StateActiveBackup)
+		}
+	})
+	if !ran {
+		return fmt.Errorf("failover: daemon is not running")
+	}
+	return switchErr
+}
 
 // Run starts the production xray-core process on primary and then drives
-// the state machine's Tick once per CheckIntervalSeconds until ctx is
-// cancelled. cfg must already have a primary and backup profile
-// configured (run `keenetic-xray setup` first otherwise).
+// the state machine's Tick once per CheckIntervalSeconds, and any
+// commands submitted via do (ForceSwitch/State), until ctx is cancelled.
+// cfg must already have a primary and backup profile configured (run
+// `keenetic-xray setup` first otherwise).
 func (d *Daemon) Run(ctx context.Context) error {
 	if d.cfg.Primary() == nil || d.cfg.Backup() == nil {
 		return fmt.Errorf("failover: primary and backup profiles must be configured first (run `keenetic-xray setup`)")
@@ -180,6 +244,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			d.machine.Tick(ctx)
+		case cmd := <-d.commands:
+			cmd.fn(ctx)
+			close(cmd.done)
 		}
 	}
 }
