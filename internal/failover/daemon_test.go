@@ -25,7 +25,15 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestDaemon_Run_RequiresPrimaryAndBackup(t *testing.T) {
+// TestDaemon_Run_IdlesWithoutProfiles covers the fresh-install case: no
+// primary/backup configured yet, which is always true the first time
+// postinst starts the daemon via init.d, before the user has run
+// `keenetic-xray setup`. Run must not error out here -- an immediate
+// error made the daemon process exit almost instantly, which made
+// init.d's post-start "is it still running" check report failure and
+// the whole opkg installation register as failed (confirmed on real
+// hardware). It must instead idle until ctx is cancelled.
+func TestDaemon_Run_IdlesWithoutProfiles(t *testing.T) {
 	cases := []struct {
 		name string
 		cfg  *config.Config
@@ -44,8 +52,28 @@ func TestDaemon_Run_RequiresPrimaryAndBackup(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d := NewDaemon(Paths{}, tc.cfg)
-			if err := d.Run(context.Background()); err == nil {
-				t.Error("expected Run to error out without primary+backup configured")
+
+			ctx, cancel := context.WithCancel(context.Background())
+			runErr := make(chan error, 1)
+			go func() { runErr <- d.Run(ctx) }()
+
+			// Run must still be idling, not already returned, a short
+			// moment after starting -- this is what actually caught the
+			// bug: the old code returned an error near-instantly here.
+			select {
+			case err := <-runErr:
+				t.Fatalf("Run returned early (%v) instead of idling without primary/backup configured", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			cancel()
+			select {
+			case err := <-runErr:
+				if err != context.Canceled {
+					t.Errorf("Run returned %v after cancellation, want context.Canceled", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("Run did not return after ctx cancellation")
 			}
 		})
 	}
