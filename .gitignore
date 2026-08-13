@@ -1,0 +1,5 @@
+/dist/
+/keenetic-xray
+*.ipk
+*.test
+*.out
