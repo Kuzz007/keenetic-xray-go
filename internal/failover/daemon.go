@@ -222,11 +222,24 @@ func (d *Daemon) ForceSwitch(ctx context.Context, role Role) error {
 // Run starts the production xray-core process on primary and then drives
 // the state machine's Tick once per CheckIntervalSeconds, and any
 // commands submitted via do (ForceSwitch/State), until ctx is cancelled.
-// cfg must already have a primary and backup profile configured (run
-// `keenetic-xray setup` first otherwise).
+//
+// If cfg has no primary/backup configured yet, Run idles instead of
+// erroring out -- it logs a hint and waits for ctx to be cancelled. This
+// matters because postinst starts the daemon via init.d immediately on
+// install, before the user has ever had a chance to run `keenetic-xray
+// setup`; erroring out here made that startup exit almost instantly,
+// which made the init script's post-start "is it still running" check
+// report failure and the whole opkg installation register as failed --
+// confirmed on real hardware. There's no live config-reload here (the
+// project has no CLI<->daemon IPC yet, a known, separately-documented
+// gap): after running `setup`, the daemon needs a manual restart
+// (`/opt/etc/init.d/S99keenetic-xray restart`) to pick up the new
+// profiles.
 func (d *Daemon) Run(ctx context.Context) error {
 	if d.cfg.Primary() == nil || d.cfg.Backup() == nil {
-		return fmt.Errorf("failover: primary and backup profiles must be configured first (run `keenetic-xray setup`)")
+		fmt.Println("failover: no primary/backup profiles configured yet -- run `keenetic-xray setup`, then restart this daemon")
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	if err := d.actions.SwitchLiveTo(ctx, RolePrimary); err != nil {
