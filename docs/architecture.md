@@ -46,14 +46,19 @@ own dependency resolution installs the Xray core from Entware's feed
 *before* running this package's postinst -- "core first, then script" is
 enforced by `opkg` itself, not a hand-rolled sequencing check.
 
-`packaging/build-ipk.sh` builds the `.ipk` by hand (an `ar` archive of
-`debian-binary` + `control.tar.gz` + `data.tar.gz` -- the format doesn't
-need dedicated tooling). This is deliberately the primary path, not a
-fallback behind `nfpm`: it was hand-verified (built a real `.ipk` from a
-cross-compiled binary and inspected its structure directly) in an
-environment with no `opkg` to test installation against, so the already-
-verified path was kept over an nfpm integration that couldn't be
-verified the same way.
+`packaging/build-ipk.sh` builds the `.ipk` by hand: a single
+gzip-compressed tar containing `./debian-binary`, `./data.tar.gz`, and
+`./control.tar.gz`, in that order. **This is not the `ar`-wrapped format
+`.deb` uses**, despite that being the commonly-documented convention for
+`.ipk` too -- real Entware's own feed doesn't use it. That wrong
+assumption originally shipped here and cost five failed real-hardware
+install attempts to find: `ar t` on a real Entware-served `.ipk`
+(`xray-core`'s own package, fetched directly from `bin.entware.net`)
+fails with "invalid ar magic", while `tar tzf` lists its three members
+directly. This is deliberately the primary path, not a fallback behind
+`nfpm`: it's now verified end-to-end on real router hardware (`opkg
+install` succeeds, the daemon starts via the generated init.d script),
+not just structurally inspected.
 
 ## Failover state machine
 

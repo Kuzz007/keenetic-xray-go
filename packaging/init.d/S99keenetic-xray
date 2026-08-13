@@ -2,9 +2,8 @@
 # Entware rc.func-based init script: daemonization and the pidfile come
 # from rc.func for free, so `daemon` just runs in the foreground.
 #
-# UNVERIFIED against real hardware -- this follows the common Entware
-# rc.func template shape but hasn't been confirmed to work on an actual
-# router yet (tracked as an M6 open item, see the plan).
+# Verified on real router hardware (aarch64 Keenetic/Entware): `start`
+# succeeds and the daemon process stays running.
 
 ENABLED=yes
 PROCS=keenetic-xray
