@@ -42,16 +42,24 @@ cp "$SCRIPT_DIR/ipk/postinst" "$WORK/control/postinst"
 cp "$SCRIPT_DIR/ipk/prerm" "$WORK/control/prerm"
 cp "$SCRIPT_DIR/ipk/conffiles" "$WORK/control/conffiles"
 chmod 0755 "$WORK/control/postinst" "$WORK/control/prerm"
+# Archive "." from inside the staging dir (not the bare filenames) so
+# every member is indexed as "./control", "./postinst", etc. Real opkg
+# looks for "./control" specifically -- a control.tar.gz whose members
+# are stored as bare "control" (no "./" prefix) is rejected as a
+# malformed package file, confirmed directly on real router hardware.
 tar --owner=0 --group=0 --numeric-owner -czf "$WORK/control.tar.gz" \
-    -C "$WORK/control" control postinst prerm conffiles
+    -C "$WORK/control" .
 
 mkdir -p "$WORK/data/opt/sbin" "$WORK/data/opt/etc/init.d"
 cp "$BINARY_ABS" "$WORK/data/opt/sbin/$PKG_NAME"
 chmod 0755 "$WORK/data/opt/sbin/$PKG_NAME"
 cp "$SCRIPT_DIR/init.d/S99keenetic-xray" "$WORK/data/opt/etc/init.d/S99keenetic-xray"
 chmod 0755 "$WORK/data/opt/etc/init.d/S99keenetic-xray"
+# Same "." convention as control.tar.gz above, for consistency -- opkg
+# extracts this relative to / regardless of the "./" prefix, but nothing
+# is gained by deviating from the format real .deb/.ipk tooling produces.
 tar --owner=0 --group=0 --numeric-owner -czf "$WORK/data.tar.gz" \
-    -C "$WORK/data" opt
+    -C "$WORK/data" .
 
 echo "2.0" > "$WORK/debian-binary"
 
@@ -60,13 +68,13 @@ echo "2.0" > "$WORK/debian-binary"
 # used even for short names that don't need the extended-name-table
 # mechanism), e.g. "debian-binary/" rather than "debian-binary". `ar t`/
 # `ar x` round-trip that fine -- GNU tooling understands its own dialect
-# -- but real opkg's minimal ar-parser does not strip it, never finds a
-# member literally named "debian-binary", and rejects the whole file as
-# "Malformed package file". Confirmed directly against real opkg on
-# actual router hardware (aarch64 Keenetic/Entware): building this same
-# script's `ar rc` output failed to install with exactly that error;
-# switching to this hand-written common/BSD-style ar format (no trailing
-# "/") installs cleanly. Do not "simplify" this back to `ar rc`.
+# -- and real opkg's ar-parser tolerates it too (this alone did not fix
+# the "Malformed package file" error on real hardware -- the actual
+# cause was the missing "./" prefix on control.tar.gz's members, see
+# above). Kept anyway since it's a strictly more conservative, more
+# widely-compatible format matching what real dpkg/opkg tooling
+# produces, verified byte-for-byte and round-trip safe locally -- do not
+# revert to `ar rc` without a reason.
 ar_header() {
     # name mtime uid gid mode(octal, as text) size, then the fixed 2-byte
     # terminator "`\n" (0x60 0x0A) -- together exactly 60 bytes, per the
