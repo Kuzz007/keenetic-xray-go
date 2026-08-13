@@ -44,6 +44,12 @@ func runDir() string {
 	return envOr("KEENETIC_XRAY_RUN_DIR", defaultRunDir)
 }
 
+const defaultAgentTokenFile = "/opt/etc/keenetic-xray/agent-token.secret"
+
+func defaultAgentTokenPath() string {
+	return envOr("KEENETIC_XRAY_AGENT_TOKEN_FILE", defaultAgentTokenFile)
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

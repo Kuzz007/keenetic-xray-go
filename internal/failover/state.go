@@ -219,3 +219,15 @@ func (m *Machine) transitionTo(next State) {
 		m.onTransition(prev, next)
 	}
 }
+
+// forceState immediately sets the state and clears the failure/success
+// counters and any pending rollback backoff. Used for an explicit
+// external command (CLI/bot force-switch), not the normal tick-driven
+// evaluation, so a stale backoff from a previous automatic rollback can't
+// block an operator-requested switch.
+func (m *Machine) forceState(s State) {
+	m.consecutiveFailures = 0
+	m.isolatedSuccesses = 0
+	m.backoffUntil = time.Time{}
+	m.transitionTo(s)
+}

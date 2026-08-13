@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Kuzz007/keenetic-xray-go/internal/botcontrol"
 	"github.com/Kuzz007/keenetic-xray-go/internal/config"
 	"github.com/Kuzz007/keenetic-xray-go/internal/failover"
 	"github.com/Kuzz007/keenetic-xray-go/internal/version"
@@ -48,6 +49,8 @@ func run(args []string) error {
 		return cmdDoctor(rest)
 	case "variant":
 		return cmdVariant(rest)
+	case "agent":
+		return cmdAgent(rest)
 	case "internal":
 		return cmdInternal(rest)
 	default:
@@ -75,7 +78,7 @@ commands:
   status                                            show configured profiles and variant
   doctor                                            run diagnostic checks
   variant {show|set mini|set full}
-  agent                                             run the control-server polling agent (not yet implemented)`)
+  agent {configure <url> <router-id> <fingerprint> <token>|enable|disable|status}`)
 }
 
 func cmdDaemon(args []string) error {
@@ -104,6 +107,21 @@ func cmdDaemon(args []string) error {
 	if p, b := cfg.Primary(), cfg.Backup(); p != nil && b != nil {
 		fmt.Printf("starting failover daemon (primary=%s, backup=%s)\n", p.Remark, b.Remark)
 	}
+
+	if cfg.Agent.Enabled {
+		opts, err := loadAgentOptions(cfg)
+		if err != nil {
+			return fmt.Errorf("agent is enabled but misconfigured: %w", err)
+		}
+		handler := &botcontrol.RouterHandler{Daemon: d, Config: cfg, ConfigPath: configPath()}
+		go func() {
+			if err := botcontrol.Run(ctx, opts, handler); err != nil && ctx.Err() == nil {
+				fmt.Fprintln(os.Stderr, "agent stopped:", err)
+			}
+		}()
+		fmt.Println("bot-control agent enabled, polling", opts.ControlServerURL)
+	}
+
 	if err := d.Run(ctx); err != nil && ctx.Err() == nil {
 		return err
 	}

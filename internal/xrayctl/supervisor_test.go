@@ -121,7 +121,10 @@ func TestSupervisor_RestartsOnCrash(t *testing.T) {
 	}
 	defer sup.Stop()
 
-	timeout := time.After(3 * time.Second)
+	// Generous timeout: this is normally well under 1s (5-20ms backoff x
+	// 3 restarts), but -race instrumentation adds enough process-spawn
+	// overhead to make a tight bound flaky.
+	timeout := time.After(15 * time.Second)
 	for seen := 0; seen < 3; {
 		select {
 		case <-restarts:
