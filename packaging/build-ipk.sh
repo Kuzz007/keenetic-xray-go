@@ -55,7 +55,41 @@ tar --owner=0 --group=0 --numeric-owner -czf "$WORK/data.tar.gz" \
 
 echo "2.0" > "$WORK/debian-binary"
 
+# Hand-rolled ar archive, deliberately not `ar rc`: GNU ar's default
+# output terminates every member name with "/" (its SysV/GNU dialect,
+# used even for short names that don't need the extended-name-table
+# mechanism), e.g. "debian-binary/" rather than "debian-binary". `ar t`/
+# `ar x` round-trip that fine -- GNU tooling understands its own dialect
+# -- but real opkg's minimal ar-parser does not strip it, never finds a
+# member literally named "debian-binary", and rejects the whole file as
+# "Malformed package file". Confirmed directly against real opkg on
+# actual router hardware (aarch64 Keenetic/Entware): building this same
+# script's `ar rc` output failed to install with exactly that error;
+# switching to this hand-written common/BSD-style ar format (no trailing
+# "/") installs cleanly. Do not "simplify" this back to `ar rc`.
+ar_header() {
+    # name mtime uid gid mode(octal, as text) size, then the fixed 2-byte
+    # terminator "`\n" (0x60 0x0A) -- together exactly 60 bytes, per the
+    # common ar format every .deb/.ipk consumer expects.
+    printf '%-16s%-12s%-6s%-6s%-8s%-10s`\n' "$1" "0" "0" "0" "644" "$2"
+}
+
 rm -f "$OUTPUT_ABS"
-(cd "$WORK" && ar rc "$OUTPUT_ABS" debian-binary control.tar.gz data.tar.gz)
+(
+    cd "$WORK"
+    {
+        printf '!<arch>\n'
+        for member in debian-binary control.tar.gz data.tar.gz; do
+            size=$(wc -c < "$member")
+            ar_header "$member" "$size"
+            cat "$member"
+            # Each member is padded to an even length so the next header
+            # always starts on an even offset.
+            if [ $((size % 2)) -ne 0 ]; then
+                printf '\n'
+            fi
+        done
+    } > "$OUTPUT_ABS"
+)
 
 echo "built $OUTPUT_ABS"
