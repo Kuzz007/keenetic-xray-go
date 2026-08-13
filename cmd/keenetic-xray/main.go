@@ -3,9 +3,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/Kuzz007/keenetic-xray-go/internal/config"
+	"github.com/Kuzz007/keenetic-xray-go/internal/failover"
 	"github.com/Kuzz007/keenetic-xray-go/internal/version"
 )
 
@@ -18,37 +23,87 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return usageError()
+		return usageError("")
 	}
 
-	switch args[0] {
+	cmd, rest := args[0], args[1:]
+	switch cmd {
 	case "version":
 		fmt.Println(version.String())
 		return nil
 	case "help", "-h", "--help":
 		printUsage()
 		return nil
+	case "setup":
+		return cmdSetup(rest)
+	case "daemon":
+		return cmdDaemon(rest)
+	case "profile":
+		return cmdProfile(rest)
+	case "subscription":
+		return cmdSubscription(rest)
+	case "status":
+		return cmdStatus(rest)
+	case "doctor":
+		return cmdDoctor(rest)
+	case "variant":
+		return cmdVariant(rest)
 	default:
-		return usageError()
+		return usageError(cmd)
 	}
 }
 
-func usageError() error {
+func usageError(cmd string) error {
 	printUsage()
-	return fmt.Errorf("unknown or unimplemented command %q", os.Args[len(os.Args)-1])
+	if cmd == "" {
+		return fmt.Errorf("no command given")
+	}
+	return fmt.Errorf("unknown command %q", cmd)
 }
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, `usage: keenetic-xray <command> [args]
 
 commands:
-  version      print version and exit
-  setup        interactive first-run configuration menu (not yet implemented)
-  daemon       run the failover daemon in the foreground (not yet implemented)
-  profile      manage VLESS profiles (not yet implemented)
-  subscription manage the subscription URL and its profiles (not yet implemented)
-  status       show current failover status (not yet implemented)
-  doctor       print diagnostics (not yet implemented)
-  variant      show or set the mini/full variant (not yet implemented)
-  agent        run the control-server polling agent (not yet implemented)`)
+  version                                          print version and exit
+  setup                                             interactive first-run configuration menu
+  daemon                                            run the failover daemon in the foreground
+  profile {add <vless-uri>|list|remove <index>}
+  subscription {set-url <url>|refresh|list|set-primary <i>|set-backup <i>}
+  status                                            show configured profiles and variant
+  doctor                                            run diagnostic checks
+  variant {show|set mini|set full}
+  agent                                             run the control-server polling agent (not yet implemented)`)
+}
+
+func cmdDaemon(args []string) error {
+	cfg, err := config.Load(configPath())
+	if err != nil {
+		return err
+	}
+
+	d := failover.NewDaemon(failover.Paths{
+		XrayBinary:       xrayBinaryPath(),
+		ProductionConfig: productionConfigPath(),
+		PretestConfig:    pretestConfigPath(),
+	}, cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		fmt.Println("shutting down...")
+		cancel()
+	}()
+
+	if p, b := cfg.Primary(), cfg.Backup(); p != nil && b != nil {
+		fmt.Printf("starting failover daemon (primary=%s, backup=%s)\n", p.Remark, b.Remark)
+	}
+	if err := d.Run(ctx); err != nil && ctx.Err() == nil {
+		return err
+	}
+	return nil
 }
