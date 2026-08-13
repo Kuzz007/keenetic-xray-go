@@ -89,19 +89,15 @@ func pollOnce(ctx context.Context, client *http.Client, opts AgentOptions, handl
 }
 
 func poll(ctx context.Context, client *http.Client, opts AgentOptions) (*Command, error) {
-	body, err := json.Marshal(PollRequest{RouterID: opts.RouterID})
-	if err != nil {
-		return nil, err
-	}
 	var resp PollResponse
-	if err := doJSON(ctx, client, opts, "/agent/poll", body, &resp); err != nil {
+	if err := doJSON(ctx, client, opts, "/agent/poll", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Command, nil
 }
 
 func postResult(ctx context.Context, client *http.Client, opts AgentOptions, result Result) error {
-	body, err := json.Marshal(ResultRequest{RouterID: opts.RouterID, Result: result})
+	body, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
@@ -116,6 +112,7 @@ func doJSON(ctx context.Context, client *http.Client, opts AgentOptions, path st
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+opts.Token)
+	req.Header.Set(RouterIDHeader, opts.RouterID)
 
 	resp, err := client.Do(req)
 	if err != nil {

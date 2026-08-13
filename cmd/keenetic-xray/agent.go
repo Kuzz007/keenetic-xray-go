@@ -66,6 +66,9 @@ func agentSetEnabled(enabled bool) error {
 		return err
 	}
 	if enabled {
+		if cfg.Variant != config.VariantFull {
+			return fmt.Errorf("remote control agent requires the Full variant (current: %s) -- see docs/full-vs-mini.md", cfg.Variant)
+		}
 		if cfg.Agent.ControlServerURL == "" || cfg.Agent.RouterID == "" || cfg.Agent.FingerprintSHA256 == "" || cfg.Agent.TokenFile == "" {
 			return fmt.Errorf("agent is not configured -- run `keenetic-xray agent configure` first")
 		}

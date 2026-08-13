@@ -41,8 +41,8 @@ single named constant.
 | xray-core + failover daemon, local SOCKS5/HTTP inbound | yes | yes |
 | `profile`/`subscription` CLI + `setup` wizard, incl. subscription-link parsing | yes | yes |
 | Manual `subscription refresh` | yes | yes |
-| Log/state retention | small | larger, including failover + bot audit history (once the bot exists) |
-| Remote control agent (once built) | off by default | on by default |
+| Log/state retention | small | larger, including failover + bot audit history |
+| Remote control agent (`agent enable`) | off by default | on by default |
 
 Subscription-link support is deliberately **not** Full-gated, unlike a
 naive port of the reference project's split would suggest: a real
