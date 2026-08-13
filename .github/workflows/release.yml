@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # goreleaser's nfpm integration wasn't used for the .ipk itself (see
+      # packaging/build-ipk.sh for why) -- build it here from the binaries
+      # goreleaser just produced, and attach it to the same release.
+      #
+      # NOTE on the paths below: with `archives: formats: [binary]`,
+      # goreleaser's release-upload artifact is named
+      # keenetic-xray-linux-<arch>, but that name is only applied at
+      # upload time -- the actual on-disk file after `goreleaser release`
+      # stays at dist/<build-id>_<target>/keenetic-xray (verified directly
+      # with `goreleaser release --snapshot --clean` + inspecting
+      # dist/artifacts.json; do not "simplify" this to the flat name, it
+      # does not exist on disk).
+      - name: Build .ipk packages
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME#v}"
+          sh packaging/build-ipk.sh "${VERSION}-1" aarch64-3.10 \
+            "dist/keenetic-xray-arm64_linux_arm64_v8.0/keenetic-xray" \
+            "dist/keenetic-xray_${VERSION}-1_aarch64-3.10.ipk"
+          sh packaging/build-ipk.sh "${VERSION}-1" mipsel-3.4 \
+            "dist/keenetic-xray-mipsle_linux_mipsle_softfloat/keenetic-xray" \
+            "dist/keenetic-xray_${VERSION}-1_mipsel-3.4.ipk"
+
+      - name: Upload .ipk packages to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/*.ipk --clobber
