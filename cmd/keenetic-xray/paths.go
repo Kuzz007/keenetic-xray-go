@@ -32,6 +32,18 @@ func optPath() string {
 	return envOr("KEENETIC_XRAY_OPT", defaultOptPath)
 }
 
+const defaultLogDir = "/opt/var/log/keenetic-xray"
+
+func logDir() string {
+	return envOr("KEENETIC_XRAY_LOG_DIR", defaultLogDir)
+}
+
+const defaultRunDir = "/opt/var/run"
+
+func runDir() string {
+	return envOr("KEENETIC_XRAY_RUN_DIR", defaultRunDir)
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

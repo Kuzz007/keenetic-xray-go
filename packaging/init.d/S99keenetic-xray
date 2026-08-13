@@ -1,0 +1,17 @@
+#!/opt/bin/sh
+# Entware rc.func-based init script: daemonization and the pidfile come
+# from rc.func for free, so `daemon` just runs in the foreground.
+#
+# UNVERIFIED against real hardware -- this follows the common Entware
+# rc.func template shape but hasn't been confirmed to work on an actual
+# router yet (tracked as an M6 open item, see the plan).
+
+ENABLED=yes
+PROCS=keenetic-xray
+ARGS="daemon"
+PREARGS=""
+DESC=$PROCS
+PATH=/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# shellcheck source=/opt/etc/init.d/rc.func
+. /opt/etc/init.d/rc.func

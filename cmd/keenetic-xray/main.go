@@ -48,6 +48,8 @@ func run(args []string) error {
 		return cmdDoctor(rest)
 	case "variant":
 		return cmdVariant(rest)
+	case "internal":
+		return cmdInternal(rest)
 	default:
 		return usageError(cmd)
 	}

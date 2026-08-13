@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+/opt/sbin/keenetic-xray internal postinst-setup
+/opt/etc/init.d/S99keenetic-xray start
+
+exit 0

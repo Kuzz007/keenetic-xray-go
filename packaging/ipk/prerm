@@ -1,0 +1,5 @@
+#!/bin/sh
+
+/opt/etc/init.d/S99keenetic-xray stop || true
+
+exit 0
