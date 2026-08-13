@@ -1,0 +1,46 @@
+version: 2
+
+builds:
+  - id: keenetic-xray-arm64
+    main: ./cmd/keenetic-xray
+    binary: keenetic-xray
+    goos: [linux]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/Kuzz007/keenetic-xray-go/internal/version.Version={{.Version}}
+      - -X github.com/Kuzz007/keenetic-xray-go/internal/version.Commit={{.ShortCommit}}
+
+  - id: keenetic-xray-mipsle
+    main: ./cmd/keenetic-xray
+    binary: keenetic-xray
+    goos: [linux]
+    goarch: [mipsle]
+    gomips: [softfloat]
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/Kuzz007/keenetic-xray-go/internal/version.Version={{.Version}}
+      - -X github.com/Kuzz007/keenetic-xray-go/internal/version.Commit={{.ShortCommit}}
+
+archives:
+  - formats: [binary]
+    name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+# release-please/a human pushing a v* tag owns creating the tag/release;
+# goreleaser only attaches build artifacts to it.
+release:
+  mode: append
+
+changelog:
+  disable: true

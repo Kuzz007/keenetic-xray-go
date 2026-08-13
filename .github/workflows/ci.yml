@@ -29,6 +29,16 @@ jobs:
       - name: go test
         run: go test ./...
 
+      - name: shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck -s sh -S warning \
+            packaging/build-ipk.sh \
+            packaging/ipk/postinst \
+            packaging/ipk/prerm \
+            packaging/init.d/S99keenetic-xray
+
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -37,8 +47,10 @@ jobs:
         include:
           - goarch: arm64
             gomips: ""
+            qemu: qemu-aarch64-static
           - goarch: mipsle
             gomips: softfloat
+            qemu: qemu-mipsel-static
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -55,3 +67,25 @@ jobs:
           go build -trimpath -ldflags "-s -w" \
             -o "dist/keenetic-xray-linux-${{ matrix.goarch }}" \
             ./cmd/keenetic-xray
+
+      # Actually executes the cross-compiled binary under QEMU user-mode
+      # emulation (not just a format/vet check) -- installed via apt, not
+      # docker/setup-qemu-action, since that action's bundled emulators
+      # dropped mips/mipsle support upstream.
+      - name: Install QEMU user-mode emulation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+
+      - name: Smoke test under QEMU
+        run: ${{ matrix.qemu }} "dist/keenetic-xray-linux-${{ matrix.goarch }}" version
+
+      - name: Build .ipk
+        run: |
+          case "${{ matrix.goarch }}" in
+            arm64) IPK_ARCH=aarch64-3.10 ;;
+            mipsle) IPK_ARCH=mipsel-3.4 ;;
+          esac
+          sh packaging/build-ipk.sh 0.0.0-ci "$IPK_ARCH" \
+            "dist/keenetic-xray-linux-${{ matrix.goarch }}" \
+            "dist/keenetic-xray_0.0.0-ci_${IPK_ARCH}.ipk"
