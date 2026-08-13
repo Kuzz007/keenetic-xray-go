@@ -40,7 +40,6 @@ sed \
     "$SCRIPT_DIR/ipk/control.tmpl" > "$WORK/control/control"
 cp "$SCRIPT_DIR/ipk/postinst" "$WORK/control/postinst"
 cp "$SCRIPT_DIR/ipk/prerm" "$WORK/control/prerm"
-cp "$SCRIPT_DIR/ipk/conffiles" "$WORK/control/conffiles"
 chmod 0755 "$WORK/control/postinst" "$WORK/control/prerm"
 # Archive "." from inside the staging dir (not the bare filenames) so
 # every member is indexed as "./control", "./postinst", etc. Real opkg
@@ -76,10 +75,16 @@ echo "2.0" > "$WORK/debian-binary"
 # produces, verified byte-for-byte and round-trip safe locally -- do not
 # revert to `ar rc` without a reason.
 ar_header() {
-    # name mtime uid gid mode(octal, as text) size, then the fixed 2-byte
-    # terminator "`\n" (0x60 0x0A) -- together exactly 60 bytes, per the
-    # common ar format every .deb/.ipk consumer expects.
-    printf '%-16s%-12s%-6s%-6s%-8s%-10s`\n' "$1" "0" "0" "0" "644" "$2"
+    # name mtime uid gid mode size, then the fixed 2-byte terminator
+    # "`\n" (0x60 0x0A) -- together exactly 60 bytes, per the common ar
+    # format every .deb/.ipk consumer expects. mode is "100644", not
+    # "644": this field holds the full POSIX st_mode, and the leading
+    # "10" is St_IFREG (regular file) in octal, not decoration -- a
+    # bare "644" (verified via a byte-for-byte diff against a real
+    # `dpkg-deb --build` reference archive) was the one remaining
+    # structural discrepancy left after the "./" fix above, and was
+    # still enough on its own to make real opkg reject the file.
+    printf '%-16s%-12s%-6s%-6s%-8s%-10s`\n' "$1" "0" "0" "0" "100644" "$2"
 }
 
 rm -f "$OUTPUT_ABS"
