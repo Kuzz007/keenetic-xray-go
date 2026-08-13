@@ -1,8 +1,24 @@
 #!/bin/sh
 # build-ipk.sh -- hand-rolled .ipk builder, fallback for when goreleaser's
 # nfpm integration doesn't produce something real opkg accepts (M7 spike,
-# not yet verified). The ipk format doesn't need dedicated tooling: it's
-# an `ar` archive of debian-binary, control.tar.gz, and data.tar.gz.
+# not yet verified).
+#
+# The .ipk format here is a single gzip-compressed tar containing
+# "./debian-binary", "./data.tar.gz", and "./control.tar.gz" -- NOT an
+# `ar` archive. That assumption (ipk == the ar-wrapped .deb format) was
+# wrong and cost three failed real-hardware install attempts to find:
+# `ar t` on a real Entware-served .ipk (xray-core's own package,
+# downloaded directly from bin.entware.net) fails with "invalid ar
+# magic", while `tar tzf` on the same file lists the three members
+# directly and its first bytes are the plain gzip magic (1f 8b). This
+# script now matches that exact reference file byte-for-byte in
+# structure (including member order: debian-binary, data.tar.gz,
+# control.tar.gz, not the alphabetical/`ar`-conventional order used
+# earlier). Confirmed on real hardware. Do not "fix" this back to an ar
+# archive without re-confirming against a real Entware-served .ipk --
+# every ar-based attempt looked individually correct (byte-verified,
+# even matched a real `dpkg-deb --build` reference archive) and every
+# one was still rejected, because the container format itself was wrong.
 #
 # Usage: build-ipk.sh <version> <arch> <binary-path> <output.ipk>
 # Example:
@@ -42,10 +58,8 @@ cp "$SCRIPT_DIR/ipk/postinst" "$WORK/control/postinst"
 cp "$SCRIPT_DIR/ipk/prerm" "$WORK/control/prerm"
 chmod 0755 "$WORK/control/postinst" "$WORK/control/prerm"
 # Archive "." from inside the staging dir (not the bare filenames) so
-# every member is indexed as "./control", "./postinst", etc. Real opkg
-# looks for "./control" specifically -- a control.tar.gz whose members
-# are stored as bare "control" (no "./" prefix) is rejected as a
-# malformed package file, confirmed directly on real router hardware.
+# every member is indexed as "./control", "./postinst", etc., matching
+# the real reference .ipk's own control.tar.gz layout.
 tar --owner=0 --group=0 --numeric-owner -czf "$WORK/control.tar.gz" \
     -C "$WORK/control" .
 
@@ -54,55 +68,16 @@ cp "$BINARY_ABS" "$WORK/data/opt/sbin/$PKG_NAME"
 chmod 0755 "$WORK/data/opt/sbin/$PKG_NAME"
 cp "$SCRIPT_DIR/init.d/S99keenetic-xray" "$WORK/data/opt/etc/init.d/S99keenetic-xray"
 chmod 0755 "$WORK/data/opt/etc/init.d/S99keenetic-xray"
-# Same "." convention as control.tar.gz above, for consistency -- opkg
-# extracts this relative to / regardless of the "./" prefix, but nothing
-# is gained by deviating from the format real .deb/.ipk tooling produces.
 tar --owner=0 --group=0 --numeric-owner -czf "$WORK/data.tar.gz" \
     -C "$WORK/data" .
 
 echo "2.0" > "$WORK/debian-binary"
 
-# Hand-rolled ar archive, deliberately not `ar rc`: GNU ar's default
-# output terminates every member name with "/" (its SysV/GNU dialect,
-# used even for short names that don't need the extended-name-table
-# mechanism), e.g. "debian-binary/" rather than "debian-binary". `ar t`/
-# `ar x` round-trip that fine -- GNU tooling understands its own dialect
-# -- and real opkg's ar-parser tolerates it too (this alone did not fix
-# the "Malformed package file" error on real hardware -- the actual
-# cause was the missing "./" prefix on control.tar.gz's members, see
-# above). Kept anyway since it's a strictly more conservative, more
-# widely-compatible format matching what real dpkg/opkg tooling
-# produces, verified byte-for-byte and round-trip safe locally -- do not
-# revert to `ar rc` without a reason.
-ar_header() {
-    # name mtime uid gid mode size, then the fixed 2-byte terminator
-    # "`\n" (0x60 0x0A) -- together exactly 60 bytes, per the common ar
-    # format every .deb/.ipk consumer expects. mode is "100644", not
-    # "644": this field holds the full POSIX st_mode, and the leading
-    # "10" is St_IFREG (regular file) in octal, not decoration -- a
-    # bare "644" (verified via a byte-for-byte diff against a real
-    # `dpkg-deb --build` reference archive) was the one remaining
-    # structural discrepancy left after the "./" fix above, and was
-    # still enough on its own to make real opkg reject the file.
-    printf '%-16s%-12s%-6s%-6s%-8s%-10s`\n' "$1" "0" "0" "0" "100644" "$2"
-}
-
 rm -f "$OUTPUT_ABS"
-(
-    cd "$WORK"
-    {
-        printf '!<arch>\n'
-        for member in debian-binary control.tar.gz data.tar.gz; do
-            size=$(wc -c < "$member")
-            ar_header "$member" "$size"
-            cat "$member"
-            # Each member is padded to an even length so the next header
-            # always starts on an even offset.
-            if [ $((size % 2)) -ne 0 ]; then
-                printf '\n'
-            fi
-        done
-    } > "$OUTPUT_ABS"
-)
+# Explicit "./"-prefixed args, in this exact order, so the archive's
+# member names and ordering match the real reference .ipk exactly
+# rather than whatever tar's own directory-scan order would produce.
+tar --owner=0 --group=0 --numeric-owner -czf "$OUTPUT_ABS" \
+    -C "$WORK" ./debian-binary ./data.tar.gz ./control.tar.gz
 
 echo "built $OUTPUT_ABS"
