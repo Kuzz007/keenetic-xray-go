@@ -29,14 +29,27 @@ fits together, `docs/full-vs-mini.md` for the Mini/Full variant split, and
 
 ## Installing
 
-Download the `.ipk` matching your router's architecture from the
+Grab the `.ipk` matching your router's architecture from the
 [latest release](https://github.com/Kuzz007/keenetic-xray-go/releases/latest)
-and install it directly — no package feed to add first:
+and install it — no package feed to add first, `opkg` can install
+straight from a URL:
 
 ```sh
-opkg install keenetic-xray_<version>_aarch64-3.10.ipk   # newer, ARM-based models
-opkg install keenetic-xray_<version>_mipsel-3.4.ipk     # older, MIPS-based models
+opkg install https://github.com/Kuzz007/keenetic-xray-go/releases/download/v0.1.0/keenetic-xray_0.1.0-1_aarch64-3.10.ipk   # newer, ARM-based models
+opkg install https://github.com/Kuzz007/keenetic-xray-go/releases/download/v0.1.0/keenetic-xray_0.1.0-1_mipsel-3.4.ipk     # older, MIPS-based models
 ```
+
+If your `opkg` build doesn't handle the release CDN's HTTPS redirect,
+download first and install the local file instead:
+
+```sh
+wget https://github.com/Kuzz007/keenetic-xray-go/releases/download/v0.1.0/keenetic-xray_0.1.0-1_aarch64-3.10.ipk -O /opt/keenetic-xray.ipk
+opkg install /opt/keenetic-xray.ipk
+```
+
+(Substitute the filename/version for whatever's on the
+[latest release](https://github.com/Kuzz007/keenetic-xray-go/releases/latest)
+page once newer versions ship.)
 
 `opkg` installs the `xray-core` dependency from the Entware feed
 automatically before running this package's postinst. Once installed:
