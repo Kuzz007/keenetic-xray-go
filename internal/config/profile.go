@@ -21,7 +21,7 @@ type Profile struct {
 	Encryption string `json:"encryption"` // almost always "none"
 	Flow       string `json:"flow,omitempty"`
 
-	Network  string `json:"network"`  // tcp | ws | grpc | h2
+	Network  string `json:"network"`  // tcp | ws | grpc | h2 | xhttp
 	Security string `json:"security"` // none | tls | reality
 
 	SNI         string   `json:"sni,omitempty"`
@@ -31,10 +31,11 @@ type Profile struct {
 	ShortID     string   `json:"short_id,omitempty"`   // sid= (REALITY)
 	SpiderX     string   `json:"spider_x,omitempty"`   // spx= (REALITY)
 
-	Path        string `json:"path,omitempty"`         // ws/h2
-	Host        string `json:"host,omitempty"`         // ws/h2 Host header
+	Path        string `json:"path,omitempty"`         // ws/h2/xhttp
+	Host        string `json:"host,omitempty"`         // ws/h2/xhttp Host header
 	ServiceName string `json:"service_name,omitempty"` // grpc
 	HeaderType  string `json:"header_type,omitempty"`  // tcp
+	Mode        string `json:"mode,omitempty"`         // xhttp: packet-up | stream-up | stream-one
 }
 
 // Validate checks that a Profile has the fields required to generate a
@@ -50,7 +51,7 @@ func (p *Profile) Validate() error {
 		return fmt.Errorf("invalid port %d", p.Port)
 	}
 	switch p.Network {
-	case "tcp", "ws", "grpc", "h2":
+	case "tcp", "ws", "grpc", "h2", "xhttp":
 	default:
 		return fmt.Errorf("unsupported network %q", p.Network)
 	}

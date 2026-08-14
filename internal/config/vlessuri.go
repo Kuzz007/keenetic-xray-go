@@ -56,6 +56,7 @@ func ParseVLESSURI(raw string) (Profile, error) {
 		Host:        q.Get("host"),
 		ServiceName: q.Get("serviceName"),
 		HeaderType:  q.Get("headerType"),
+		Mode:        q.Get("mode"),
 	}
 	if alpn := q.Get("alpn"); alpn != "" {
 		profile.ALPN = strings.Split(alpn, ",")
@@ -92,6 +93,7 @@ func (p Profile) URI() string {
 	setIfNonEmpty(q, "host", p.Host)
 	setIfNonEmpty(q, "serviceName", p.ServiceName)
 	setIfNonEmpty(q, "headerType", p.HeaderType)
+	setIfNonEmpty(q, "mode", p.Mode)
 	if len(p.ALPN) > 0 {
 		q.Set("alpn", strings.Join(p.ALPN, ","))
 	}

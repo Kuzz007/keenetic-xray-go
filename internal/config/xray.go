@@ -174,6 +174,18 @@ func buildStreamSettings(p Profile) (map[string]any, error) {
 			h2Settings["host"] = []string{p.Host}
 		}
 		stream["httpSettings"] = h2Settings
+	case "xhttp":
+		xhttpSettings := map[string]any{}
+		if p.Path != "" {
+			xhttpSettings["path"] = p.Path
+		}
+		if p.Host != "" {
+			xhttpSettings["host"] = p.Host
+		}
+		if p.Mode != "" {
+			xhttpSettings["mode"] = p.Mode
+		}
+		stream["xhttpSettings"] = xhttpSettings
 	default:
 		return nil, fmt.Errorf("unsupported network %q", p.Network)
 	}
