@@ -84,6 +84,42 @@ func TestGenerateXrayConfig_WSTLS(t *testing.T) {
 	}
 }
 
+func TestGenerateXrayConfig_XHTTPTLS(t *testing.T) {
+	p := validProfile()
+	p.Network = "xhttp"
+	p.Security = "tls"
+	p.SNI = "cdn.example.com"
+	p.Path = "/xhttp"
+	p.Host = "cdn.example.com"
+	p.Mode = "stream-up"
+
+	data, err := GenerateXrayConfig(XrayConfigOptions{SOCKSPort: 1080, Outbound: p})
+	if err != nil {
+		t.Fatalf("GenerateXrayConfig: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	outbound := decoded["outbounds"].([]any)[0].(map[string]any)
+	stream := outbound["streamSettings"].(map[string]any)
+
+	if stream["network"] != "xhttp" || stream["security"] != "tls" {
+		t.Errorf("stream = %#v, want network=xhttp security=tls", stream)
+	}
+	xhttpSettings := stream["xhttpSettings"].(map[string]any)
+	if xhttpSettings["path"] != "/xhttp" {
+		t.Errorf("xhttpSettings.path = %v, want /xhttp", xhttpSettings["path"])
+	}
+	if xhttpSettings["host"] != "cdn.example.com" {
+		t.Errorf("xhttpSettings.host = %v, want cdn.example.com", xhttpSettings["host"])
+	}
+	if xhttpSettings["mode"] != "stream-up" {
+		t.Errorf("xhttpSettings.mode = %v, want stream-up", xhttpSettings["mode"])
+	}
+}
+
 func TestGenerateXrayConfig_GRPCReality(t *testing.T) {
 	p := validProfile()
 	p.Network = "grpc"

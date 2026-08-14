@@ -61,6 +61,24 @@ func TestParseVLESSURI(t *testing.T) {
 			},
 		},
 		{
+			name: "xhttp tls with mode and host",
+			uri:  "vless://uuid-6@cdn.example.net:443?type=xhttp&security=tls&sni=cdn.example.net&fp=chrome&path=%2Fxhttp&host=cdn.example.net&mode=stream-up#xhttp-tls",
+			want: Profile{
+				Remark:      "xhttp-tls",
+				UUID:        "uuid-6",
+				Address:     "cdn.example.net",
+				Port:        443,
+				Encryption:  "none",
+				Network:     "xhttp",
+				Security:    "tls",
+				SNI:         "cdn.example.net",
+				Fingerprint: "chrome",
+				Path:        "/xhttp",
+				Host:        "cdn.example.net",
+				Mode:        "stream-up",
+			},
+		},
+		{
 			name: "no fragment falls back to address as remark",
 			uri:  "vless://uuid-3@host.example:443?type=tcp&security=none",
 			want: Profile{
@@ -140,6 +158,7 @@ func TestProfileURI_RoundTrip(t *testing.T) {
 		"vless://11111111-2222-3333-4444-555555555555@example.com:443?type=tcp&security=none#My%20Server",
 		"vless://uuid-1@1.2.3.4:8443?type=ws&security=tls&sni=cdn.example.com&fp=chrome&path=%2Fws&host=cdn.example.com#ws-tls",
 		"vless://uuid-2@10.0.0.1:443?type=grpc&security=reality&pbk=PUBKEY&sid=SHORTID&spx=%2F&flow=xtls-rprx-vision&serviceName=grpcsvc#reality-grpc",
+		"vless://uuid-6@cdn.example.net:443?type=xhttp&security=tls&sni=cdn.example.net&fp=chrome&path=%2Fxhttp&host=cdn.example.net&mode=stream-up#xhttp-tls",
 	}
 
 	for _, uri := range uris {
