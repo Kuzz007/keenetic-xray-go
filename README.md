@@ -29,10 +29,20 @@ fits together, `docs/full-vs-mini.md` for the Mini/Full variant split, and
 
 ## Installing
 
-Grab the `.ipk` matching your router's architecture from the
+Run this on the router (over SSH) — it detects the router's architecture
+via `opkg` itself and installs the matching `.ipk` from the latest
+release:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/Kuzz007/keenetic-xray-go/main/install.sh | sh
+```
+
+### Manual install
+
+If you'd rather install a specific `.ipk` yourself: grab the one
+matching your router's architecture from the
 [latest release](https://github.com/Kuzz007/keenetic-xray-go/releases/latest)
-and install it — no package feed to add first, `opkg` can install
-straight from a URL:
+— no package feed to add first, `opkg` can install straight from a URL:
 
 ```sh
 opkg install https://github.com/Kuzz007/keenetic-xray-go/releases/download/v0.1.0/keenetic-xray_0.1.0-1_aarch64-3.10.ipk   # newer, ARM-based models
@@ -49,9 +59,10 @@ opkg install /opt/keenetic-xray.ipk
 
 (Substitute the filename/version for whatever's on the
 [latest release](https://github.com/Kuzz007/keenetic-xray-go/releases/latest)
-page once newer versions ship.)
+page once newer versions ship — `install.sh` above does this for you
+automatically.)
 
-`opkg` installs the `xray-core` dependency from the Entware feed
+Either way, `opkg` installs the `xray-core` dependency from the Entware feed
 automatically before running this package's postinst. Once installed:
 
 ```sh
