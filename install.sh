@@ -14,6 +14,30 @@ set -eu
 REPO="Kuzz007/keenetic-xray-go"
 TMP_IPK="/opt/keenetic-xray-install.ipk"
 
+# fetch <url> [output-file] -- prints to stdout if no output file is
+# given. Prefers curl over wget: confirmed on real hardware that some
+# routers' built-in wget (a minimal busybox build) doesn't support HTTPS
+# at all ("not an http or ftp url" for an https:// URL) while curl on
+# the same device handles it fine. Falls back to wget for routers where
+# it's the other way around.
+fetch() {
+    url="$1"
+    out="${2:-}"
+    if command -v curl >/dev/null 2>&1; then
+        if [ -n "$out" ]; then
+            curl -fsSL "$url" -o "$out"
+        else
+            curl -fsSL "$url"
+        fi
+    else
+        if [ -n "$out" ]; then
+            wget -q "$url" -O "$out"
+        else
+            wget -qO- "$url"
+        fi
+    fi
+}
+
 # Ask opkg itself which architecture tags it accepts, rather than
 # parsing `uname -m` -- opkg's own architecture list is exactly what a
 # .ipk's Architecture: field is matched against, so asking opkg directly
@@ -40,7 +64,7 @@ echo "keenetic-xray: detected architecture $ARCH"
 # hardcoding a version number here -- a static URL would go stale the
 # moment a new release ships, since asset filenames embed the version.
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
-ASSET_URL="$(wget -qO- "$API_URL" \
+ASSET_URL="$(fetch "$API_URL" \
     | grep -o "\"browser_download_url\": *\"[^\"]*_${ARCH}\.ipk\"" \
     | sed -e 's/.*"\(https[^"]*\)"/\1/' \
     | head -n 1)"
@@ -50,6 +74,6 @@ if [ -z "$ASSET_URL" ]; then
 fi
 
 echo "keenetic-xray: downloading $ASSET_URL"
-wget -q "$ASSET_URL" -O "$TMP_IPK"
+fetch "$ASSET_URL" "$TMP_IPK"
 opkg install "$TMP_IPK"
 rm -f "$TMP_IPK"
