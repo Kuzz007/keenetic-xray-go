@@ -18,10 +18,15 @@ fits together, `docs/full-vs-mini.md` for the Mini/Full variant split, and
 - Accepts either a raw `vless://` link or a subscription URL, both from
   the CLI (`keenetic-xray setup`) and the remote bot.
 - Installs the Xray core from Entware's own `opkg` feed as a package
-  dependency (`Depends: xray-core` in the `.ipk` control file); ships no
-  geoip/geosite routing data — whole-LAN redirection through the local
-  proxy port is handled by Keenetic's own Policy-Based Routing, not by
-  this project.
+  dependency (`Depends: xray-core` in the `.ipk` control file).
+- Wires itself into Keenetic's own routing automatically (`keenetic-xray
+  routes setup`, or menu item 11 in `keenetic-xray setup`): creates a
+  `Proxy0` interface pointed at the local SOCKS5 inbound and routes a
+  curated set of commonly-blocked domains (Apple, Meta/WhatsApp,
+  Telegram, TikTok, YouTube, Discord, Gemini) through it via Keenetic's
+  native `dns-proxy`/`object-group` mechanism — no manual web UI steps,
+  no `iptables`/TPROXY. See `docs/architecture.md` for how this works and
+  `internal/keeneticroute` for the implementation.
 - Optional remote control via a Telegram bot (Full variant only): a
   separate `keenetic-xray-control-server` binary runs on a VPS, and each
   router polls it for queued commands (`/status`, `/switch`,
@@ -66,12 +71,15 @@ Either way, `opkg` installs the `xray-core` dependency from the Entware feed
 automatically before running this package's postinst. Once installed:
 
 ```sh
-keenetic-xray setup     # paste a vless:// link or a subscription URL
+keenetic-xray setup     # interactive menu: profiles, subscription, status, routing, ...
 keenetic-xray daemon    # run the failover daemon in the foreground
 ```
 
 (An init.d script starts the daemon automatically on boot/install --
 `daemon` above is for running it in the foreground, e.g. to watch logs.)
+`setup` is not just a first-run wizard: run it again any time to reach
+the same menu for everything else (profile/subscription management,
+status, the remote agent, router-level routing).
 
 ## CLI reference
 
@@ -85,11 +93,35 @@ keenetic-xray status
 keenetic-xray doctor
 keenetic-xray variant {show|set mini|set full}
 keenetic-xray agent {configure <url> <router-id> <fingerprint> <token>|enable|disable|status}
+keenetic-xray routes {setup|sync|clear|status}
 ```
 
 `status`/`doctor` currently report saved configuration only (`config.json`),
 not live daemon state -- there's no CLI↔daemon IPC layer yet. `agent enable`
 requires the Full variant; see `docs/bot-control-design.md`.
+
+## Router-level routing
+
+`keenetic-xray routes setup` (also reachable as menu item 11 in
+`keenetic-xray setup`) wires the local SOCKS5 proxy into Keenetic's own
+routing, fully automatically:
+
+1. Detects this router's own LAN IP (tries the `Bridge0`/`Home`/`br0`
+   interfaces via `ndmc`, never guesses, never falls back to
+   `127.0.0.1` -- KeeneticOS's own proxy client isn't reachable over
+   loopback from the Entware side even though it's the same box).
+2. Creates (or repairs) a `Proxy0` interface whose upstream is that LAN
+   IP and the daemon's local SOCKS5 port.
+3. Routes a curated catalog of commonly-blocked domains (Apple,
+   Meta/WhatsApp/Instagram, Telegram, TikTok, YouTube, Discord, Gemini)
+   through `Proxy0` via Keenetic's native `dns-proxy`/`object-group`
+   mechanism -- only matching domains go through the proxy, everything
+   else is unaffected.
+
+`routes sync`/`routes clear`/`routes status` give finer control over
+just the domain-routing step. All of this requires `ndmc` (present on
+stock Keenetic firmware) and is a no-op with a clear error on anything
+else, including CI and local dev machines.
 
 ## Remote control (Telegram bot)
 

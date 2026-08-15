@@ -50,6 +50,12 @@ func defaultAgentTokenPath() string {
 	return envOr("KEENETIC_XRAY_AGENT_TOKEN_FILE", defaultAgentTokenFile)
 }
 
+const defaultLANIPCachePath = "/opt/var/lib/keenetic-xray/router-lan-ip"
+
+func lanIPCachePath() string {
+	return envOr("KEENETIC_XRAY_LAN_IP_CACHE", defaultLANIPCachePath)
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

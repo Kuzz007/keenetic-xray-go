@@ -43,6 +43,7 @@ single named constant.
 | Manual `subscription refresh` | yes | yes |
 | Log/state retention | small | larger, including failover + bot audit history |
 | Remote control agent (`agent enable`) | off by default | on by default |
+| Router-level routing (`routes setup`/`sync`/`clear`/`status`) | yes | yes |
 
 Subscription-link support is deliberately **not** Full-gated, unlike a
 naive port of the reference project's split would suggest: a real
@@ -51,3 +52,11 @@ a raw link, and gating that behind Full would lock the most disk-
 constrained (often oldest-hardware) users out of onboarding entirely.
 What's actually gated is remote/automatic triggering, via the same
 control-agent enable flag Full/Mini already needs -- no separate axis.
+
+Router-level routing is likewise ungated: it stores no meaningful state
+of its own (the LAN-IP cache is a few bytes) and is what actually makes
+the proxy useful without a manual web UI detour, which matters just as
+much on a disk-constrained Mini install as on Full. This matches the
+reference project, where the equivalent Proxy0/domain-routing mechanism
+is shared by both its Minimal Go and full backends rather than being a
+Full-only feature.
