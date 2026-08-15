@@ -51,6 +51,8 @@ func run(args []string) error {
 		return cmdVariant(rest)
 	case "agent":
 		return cmdAgent(rest)
+	case "routes":
+		return cmdRoutes(rest)
 	case "internal":
 		return cmdInternal(rest)
 	default:
@@ -78,7 +80,8 @@ commands:
   status                                            show configured profiles and variant
   doctor                                            run diagnostic checks
   variant {show|set mini|set full}
-  agent {configure <url> <router-id> <fingerprint> <token>|enable|disable|status}`)
+  agent {configure <url> <router-id> <fingerprint> <token>|enable|disable|status}
+  routes {setup|sync|clear|status}                 wire the local proxy into Keenetic's own routing (Proxy0 + domain routes)`)
 }
 
 func cmdDaemon(args []string) error {
